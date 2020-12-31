@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"strconv"
 
-	"html/template"
+	"github.com/tamudashe/un/pkg/repository"
 	"net/http"
 )
 
@@ -15,26 +16,27 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Initialize a slice containing the paths to the two files. Note that the home.page.tmpl file must be the
-	// *first* file in the slice.
+	s, err := app.snippets.GetLatestSnippets()
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	data := &templateData{Snippets: s}
+
 	files := []string{
 		"./ui/html/home.page.gohtml",
 		"./ui/html/base.layout.gohtml",
 		"./ui/html/footer.partial.gohtml",
 	}
 
-	// Use the template.ParseFiles() function to read the files and store the templates in a template set. Notice
-	// that we can pass the slice of file as a variadic parameter?
 	templateSet, err := template.ParseFiles(files...)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
-	// We then use the Execute() method on the template set to write the template content as the response body.
-	// The last parameter to Execute() represents dynamic data that we want to pass in, which for now we'll leave
-	// as nil.
-	err = templateSet.Execute(w, nil)
+	err = templateSet.Execute(w, data)
 	if err != nil {
 		app.serverError(w, err)
 		return
@@ -48,7 +50,34 @@ func (app *application) showSnippet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "Display a snippet with ID: %d", id)
+	s, err := app.snippets.GetSnippetByID(id)
+	if err == repository.ErrNoRecord {
+		app.notFound(w)
+		return
+	} else if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	data := &templateData{Snippet: s}
+
+	files := []string{
+		"./ui/html/show.page.gohtml",
+		"./ui/html/base.layout.gohtml",
+		"./ui/html/footer.partial.gohtml",
+	}
+
+	templateSet, err := template.ParseFiles(files...)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	err = templateSet.Execute(w, data)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
 }
 
 func (app *application) createSnippet(w http.ResponseWriter, r *http.Request) {
@@ -58,5 +87,15 @@ func (app *application) createSnippet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Write([]byte("Create a new snippet..."))
+	title := "O snail"
+	content := "to be or not to be"
+	expires := "7"
+	id, err := app.snippets.Insert(title, content, expires)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	// Redirect the user to the relevant page for the snippet.
+	http.Redirect(w, r, fmt.Sprintf("/snippet?id=%d", id), http.StatusSeeOther)
 }
