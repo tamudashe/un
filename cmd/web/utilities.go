@@ -1,11 +1,45 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"time"
 
 	"net/http"
 	"runtime/debug"
 )
+
+// render renders html templates
+func (app *application) render(w http.ResponseWriter, r *http.Request, name string, data *templateData) {
+	templateSet, ok := app.templateCache[name]
+	if !ok {
+		app.serverError(w, fmt.Errorf("template %s does not exist", name))
+		return
+	}
+
+	buffer := new(bytes.Buffer)
+
+	// inject the default data while executing the template
+	err := templateSet.Execute(buffer, app.addDefaultData(data, r))
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+	buffer.WriteTo(w)
+}
+
+// addDefaultData adds default data to a template
+func (app *application) addDefaultData(data *templateData, r *http.Request) *templateData {
+	// used to avoid nill pointer dereference
+	if data == nil {
+		data = &templateData{}
+	}
+
+	data.CurrentYear = time.Now().Year()
+
+	return data
+}
 
 // serverError helper writes an error message and stack trace to the errorLogger then sends a generic 500 Internal
 // Server Error response to the user.
